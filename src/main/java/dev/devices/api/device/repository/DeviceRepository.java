@@ -1,6 +1,8 @@
 
-package dev.devices.api.device;
+package dev.devices.api.device.repository;
 
+import dev.devices.api.device.domain.Device;
+import dev.devices.api.device.domain.DeviceState;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

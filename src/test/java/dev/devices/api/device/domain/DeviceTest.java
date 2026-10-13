@@ -1,5 +1,5 @@
 
-package dev.devices.api.device;
+package dev.devices.api.device.domain;
 
 import org.junit.jupiter.api.Test;
 

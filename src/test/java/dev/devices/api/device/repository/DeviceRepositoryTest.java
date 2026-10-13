@@ -1,6 +1,8 @@
 
-package dev.devices.api.device;
+package dev.devices.api.device.repository;
 
+import dev.devices.api.device.domain.Device;
+import dev.devices.api.device.domain.DeviceState;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
