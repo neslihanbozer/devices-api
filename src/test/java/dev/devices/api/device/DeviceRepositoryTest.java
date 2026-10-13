@@ -1,13 +1,19 @@
+
 package dev.devices.api.device;
 
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -16,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Testcontainers
 @SpringBootTest
+@Transactional
 class DeviceRepositoryTest {
 
     @Container
@@ -25,6 +32,9 @@ class DeviceRepositoryTest {
 
     @Autowired
     private DeviceRepository repository;
+
+    @Autowired
+    private EntityManager entityManager;
 
     @Test
     void shouldSaveDevice() {
@@ -48,11 +58,14 @@ class DeviceRepositoryTest {
         device.setState(DeviceState.AVAILABLE);
 
         Device saved = repository.saveAndFlush(device);
+        UUID deviceId = saved.getId();
 
-        Device found = repository.findById(saved.getId())
+        entityManager.clear();
+
+        Device found = repository.findById(deviceId)
                 .orElseThrow();
 
-        assertEquals(saved.getId(), found.getId());
+        assertEquals(deviceId, found.getId());
         assertEquals("Samsung Galaxy S25", found.getName());
         assertEquals("Samsung", found.getBrand());
         assertEquals(DeviceState.AVAILABLE, found.getState());
@@ -130,7 +143,8 @@ class DeviceRepositoryTest {
         Device savedAvailable = repository.saveAndFlush(available);
         repository.saveAndFlush(inUse);
 
-        List<Device> result = repository.findByState(DeviceState.AVAILABLE);
+        List<Device> result =
+                repository.findByState(DeviceState.AVAILABLE);
 
         assertTrue(result.stream()
                 .anyMatch(d -> d.getId().equals(savedAvailable.getId())));
@@ -169,5 +183,138 @@ class DeviceRepositoryTest {
         assertTrue(result.stream()
                 .allMatch(d -> d.getBrand().equals("Apple")
                         && d.getState() == DeviceState.AVAILABLE));
+    }
+
+    @Test
+    void shouldUpdateExistingDevice() {
+        Device device = new Device();
+        device.setName("iPhone 16");
+        device.setBrand("Apple");
+        device.setState(DeviceState.AVAILABLE);
+
+        Device saved = repository.saveAndFlush(device);
+        UUID originalId = saved.getId();
+
+        // Read the original timestamp from PostgreSQL.
+        entityManager.clear();
+
+        Device persisted = repository.findById(originalId)
+                .orElseThrow();
+
+        Instant originalCreatedAt = persisted.getCreatedAt();
+        Long originalVersion = persisted.getVersion();
+
+        persisted.setName("iPhone 16 Pro");
+        persisted.setState(DeviceState.IN_USE);
+
+        repository.saveAndFlush(persisted);
+
+        // Force a fresh read from PostgreSQL.
+        entityManager.clear();
+
+        Device updated = repository.findById(originalId)
+                .orElseThrow();
+
+        assertEquals("iPhone 16 Pro", updated.getName());
+        assertEquals("Apple", updated.getBrand());
+        assertEquals(DeviceState.IN_USE, updated.getState());
+        assertEquals(originalId, updated.getId());
+        assertEquals(originalCreatedAt, updated.getCreatedAt());
+
+        // Optimistic locking version must increase.
+        assertEquals(
+                originalVersion.longValue() + 1,
+                updated.getVersion().longValue()
+        );
+    }
+
+    @Test
+    void shouldDeleteExistingDevice() {
+        Device device = new Device();
+        device.setName("iPhone 16");
+        device.setBrand("Apple");
+        device.setState(DeviceState.AVAILABLE);
+
+        Device saved = repository.saveAndFlush(device);
+        UUID deviceId = saved.getId();
+
+        assertTrue(repository.existsById(deviceId));
+
+        repository.delete(saved);
+        repository.flush();
+        entityManager.clear();
+
+        assertFalse(repository.existsById(deviceId));
+    }
+
+    @Test
+    void shouldRejectDeviceWithoutName() {
+        Device device = new Device();
+        device.setBrand("Apple");
+        device.setState(DeviceState.AVAILABLE);
+
+        assertThrows(
+                org.springframework.dao.DataIntegrityViolationException.class,
+                () -> repository.saveAndFlush(device)
+        );
+    }
+
+    @Test
+    void shouldRejectDeviceWithoutBrand() {
+        Device device = new Device();
+        device.setName("iPhone 16");
+        device.setState(DeviceState.AVAILABLE);
+
+        assertThrows(
+                DataIntegrityViolationException.class,
+                () -> repository.saveAndFlush(device)
+        );
+    }
+
+    @Test
+    void shouldRejectDeviceWithoutState() {
+        Device device = new Device();
+        device.setName("iPhone 16");
+        device.setBrand("Apple");
+
+        assertThrows(
+                DataIntegrityViolationException.class,
+                () -> repository.saveAndFlush(device)
+        );
+    }
+
+    @Test
+    void shouldRejectConcurrentUpdateWithStaleVersion() {
+        Device device = new Device();
+        device.setName("iPhone 16");
+        device.setBrand("Apple");
+        device.setState(DeviceState.AVAILABLE);
+
+        Device saved = repository.saveAndFlush(device);
+        UUID deviceId = saved.getId();
+
+        entityManager.clear();
+
+        // First transaction's view of the device
+        Device firstCopy = repository.findById(deviceId).orElseThrow();
+        entityManager.detach(firstCopy);
+
+        // Second transaction's view of the same device
+        Device secondCopy = repository.findById(deviceId).orElseThrow();
+        entityManager.detach(secondCopy);
+
+        // First update succeeds and increments version
+        firstCopy.setName("iPhone 16 Pro");
+        repository.saveAndFlush(firstCopy);
+        entityManager.flush();
+        entityManager.clear();
+
+        // Second update still carries the old version
+        secondCopy.setName("iPhone 16 Plus");
+
+        assertThrows(
+                ObjectOptimisticLockingFailureException.class,
+                () -> repository.saveAndFlush(secondCopy)
+        );
     }
 }
