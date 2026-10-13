@@ -1,12 +1,16 @@
 
 package dev.devices.api.service;
 
+import dev.devices.api.common.exception.DeviceNotFoundException;
 import dev.devices.api.domain.Device;
-import dev.devices.api.repository.DeviceRepository;
 import dev.devices.api.dto.CreateDeviceRequest;
 import dev.devices.api.dto.DeviceResponse;
+import dev.devices.api.repository.DeviceRepository;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
 
 @Service
 public class DeviceService {
@@ -25,7 +29,14 @@ public class DeviceService {
         device.setState(request.state());
 
         Device saved = repository.saveAndFlush(device);
-
         return DeviceResponse.from(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public DeviceResponse getDeviceById(UUID id) {
+        Device device = repository.findById(id)
+                .orElseThrow(() -> new DeviceNotFoundException(id));
+
+        return DeviceResponse.from(device);
     }
 }
