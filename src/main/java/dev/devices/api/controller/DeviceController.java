@@ -1,15 +1,16 @@
 
 package dev.devices.api.controller;
 
+import dev.devices.api.domain.DeviceState;
 import dev.devices.api.dto.CreateDeviceRequest;
 import dev.devices.api.dto.DeviceResponse;
 import dev.devices.api.service.DeviceService;
-
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -28,17 +29,21 @@ public class DeviceController {
 
         DeviceResponse response = service.createDevice(request);
 
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(response);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<DeviceResponse> getDeviceById(
             @PathVariable UUID id) {
 
-        DeviceResponse response = service.getDeviceById(id);
+        return ResponseEntity.ok(service.getDeviceById(id));
+    }
 
-        return ResponseEntity.ok(response);
+    @GetMapping
+    public ResponseEntity<List<DeviceResponse>> getDevices(
+            @RequestParam(required = false) String brand,
+            @RequestParam(required = false) DeviceState state) {
+
+        return ResponseEntity.ok(service.getDevices(brand, state));
     }
 }

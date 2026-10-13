@@ -35,9 +35,9 @@ class DeviceControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    // -------------------------
+    // ========================================
     // POST /api/devices
-    // -------------------------
+    // ========================================
 
     @Test
     void shouldCreateDevice() throws Exception {
@@ -204,9 +204,9 @@ class DeviceControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
-    // -------------------------
+    // ========================================
     // GET /api/devices/{id}
-    // -------------------------
+    // ========================================
 
     @Test
     void shouldGetDeviceById() throws Exception {
@@ -251,5 +251,97 @@ class DeviceControllerTest {
     void shouldReturn400ForInvalidDeviceId() throws Exception {
         mockMvc.perform(get("/api/devices/{id}", "invalid-uuid"))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ========================================
+    // GET /api/devices - LIST & FILTER
+    // ========================================
+
+    @Test
+    void shouldListAllDevices() throws Exception {
+        mockMvc.perform(get("/api/devices"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$").isArray());
+    }
+
+    @Test
+    void shouldFilterDevicesByBrand() throws Exception {
+        String brand = "Brand-" + UUID.randomUUID();
+        createDeviceThroughApi("BrandFilterPhone", brand, "AVAILABLE");
+
+        mockMvc.perform(get("/api/devices")
+                        .param("brand", brand))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("BrandFilterPhone"))
+                .andExpect(jsonPath("$[0].brand").value(brand));
+    }
+
+    @Test
+    void shouldFilterDevicesByState() throws Exception {
+        String brand = "StateTestBrand-" + UUID.randomUUID();
+        createDeviceThroughApi("StateFilterPhone", brand, "INACTIVE");
+
+        mockMvc.perform(get("/api/devices")
+                        .param("state", "INACTIVE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[?(@.brand == '" + brand + "')]").isNotEmpty());
+    }
+
+    @Test
+    void shouldFilterDevicesByBrandAndState() throws Exception {
+        String brand = "CombinedBrand-" + UUID.randomUUID();
+
+        createDeviceThroughApi("CombinedFilterPhone", brand, "AVAILABLE");
+        createDeviceThroughApi("OtherStatePhone", brand, "INACTIVE");
+
+        mockMvc.perform(get("/api/devices")
+                        .param("brand", brand)
+                        .param("state", "AVAILABLE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("CombinedFilterPhone"))
+                .andExpect(jsonPath("$[0].state").value("AVAILABLE"));
+    }
+
+    @Test
+    void shouldReturnEmptyListWhenNoDevicesMatch() throws Exception {
+        String unknownBrand = "UnknownBrand-" + UUID.randomUUID();
+
+        mockMvc.perform(get("/api/devices")
+                        .param("brand", unknownBrand))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void shouldReturn400ForInvalidStateFilter() throws Exception {
+        mockMvc.perform(get("/api/devices")
+                        .param("state", "BROKEN"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ========================================
+    // TEST HELPER
+    // ========================================
+
+    private void createDeviceThroughApi(
+            String name, String brand, String state) throws Exception {
+
+        String request = """
+                {
+                    "name": "%s",
+                    "brand": "%s",
+                    "state": "%s"
+                }
+                """.formatted(name, brand, state);
+
+        mockMvc.perform(post("/api/devices")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isCreated());
     }
 }
