@@ -1,4 +1,4 @@
-package dev.devices.api.device;
+package dev.devices.api.domain;
 
 public enum DeviceState {
     AVAILABLE,

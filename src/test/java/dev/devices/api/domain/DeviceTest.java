@@ -1,6 +1,8 @@
 
-package dev.devices.api.device;
+package dev.devices.api.domain;
 
+import dev.devices.api.domain.Device;
+import dev.devices.api.domain.DeviceState;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
