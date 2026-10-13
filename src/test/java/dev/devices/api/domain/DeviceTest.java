@@ -6,6 +6,7 @@ import dev.devices.api.domain.DeviceState;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -41,7 +42,7 @@ class DeviceTest {
 
         assertNull(device.getCreatedAt());
 
-        Instant before = Instant.now();
+        Instant before = Instant.now().truncatedTo(ChronoUnit.MICROS);
 
         device.onCreate();
 

@@ -13,10 +13,15 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DeviceNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleDeviceNotFound(
-            DeviceNotFoundException exception) {
+            DeviceNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("message", ex.getMessage()));
+    }
 
-        return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body(Map.of("message", exception.getMessage()));
+    @ExceptionHandler(DeviceConflictException.class)
+    public ResponseEntity<Map<String, String>> handleDeviceConflict(
+            DeviceConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("message", ex.getMessage()));
     }
 }
