@@ -4,11 +4,10 @@ package dev.devices.api.controller;
 import dev.devices.api.domain.DeviceState;
 import dev.devices.api.dto.CreateDeviceRequest;
 import dev.devices.api.dto.DeviceResponse;
+import dev.devices.api.dto.PatchDeviceRequest;
 import dev.devices.api.dto.UpdateDeviceRequest;
 import dev.devices.api.service.DeviceService;
-
 import jakarta.validation.Valid;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -29,12 +28,15 @@ public class DeviceController {
     @PostMapping
     public ResponseEntity<DeviceResponse> createDevice(
             @Valid @RequestBody CreateDeviceRequest request) {
+
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(service.createDevice(request));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<DeviceResponse> getDeviceById(@PathVariable UUID id) {
+    public ResponseEntity<DeviceResponse> getDeviceById(
+            @PathVariable UUID id) {
+
         return ResponseEntity.ok(service.getDeviceById(id));
     }
 
@@ -42,6 +44,7 @@ public class DeviceController {
     public ResponseEntity<List<DeviceResponse>> getDevices(
             @RequestParam(required = false) String brand,
             @RequestParam(required = false) DeviceState state) {
+
         return ResponseEntity.ok(service.getDevices(brand, state));
     }
 
@@ -49,7 +52,16 @@ public class DeviceController {
     public ResponseEntity<DeviceResponse> updateDevice(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateDeviceRequest request) {
+
         return ResponseEntity.ok(service.updateDevice(id, request));
+    }
+
+    @PatchMapping("/{id}")
+    public ResponseEntity<DeviceResponse> patchDevice(
+            @PathVariable UUID id,
+            @Valid @RequestBody PatchDeviceRequest request) {
+
+        return ResponseEntity.ok(service.patchDevice(id, request));
     }
 
     @DeleteMapping("/{id}")

@@ -7,9 +7,9 @@ import dev.devices.api.domain.Device;
 import dev.devices.api.domain.DeviceState;
 import dev.devices.api.dto.CreateDeviceRequest;
 import dev.devices.api.dto.DeviceResponse;
+import dev.devices.api.dto.PatchDeviceRequest;
 import dev.devices.api.dto.UpdateDeviceRequest;
 import dev.devices.api.repository.DeviceRepository;
-
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,16 +33,12 @@ public class DeviceService {
         device.setBrand(request.brand());
         device.setState(request.state());
 
-        Device saved = repository.saveAndFlush(device);
-        return DeviceResponse.from(saved);
+        return DeviceResponse.from(repository.saveAndFlush(device));
     }
 
     @Transactional(readOnly = true)
     public DeviceResponse getDeviceById(UUID id) {
-        Device device = repository.findById(id)
-                .orElseThrow(() -> new DeviceNotFoundException(id));
-
-        return DeviceResponse.from(device);
+        return DeviceResponse.from(findDevice(id));
     }
 
     @Transactional(readOnly = true)
@@ -66,31 +62,38 @@ public class DeviceService {
 
     @Transactional
     public DeviceResponse updateDevice(UUID id, UpdateDeviceRequest request) {
-        Device device = repository.findById(id)
-                .orElseThrow(() -> new DeviceNotFoundException(id));
+        Device device = findDevice(id);
 
-        boolean nameChanged = !Objects.equals(device.getName(), request.name());
-        boolean brandChanged = !Objects.equals(device.getBrand(), request.brand());
+        return applyUpdate(
+                device,
+                request.name(),
+                request.brand(),
+                request.state()
+        );
+    }
 
-        if (device.getState() == DeviceState.IN_USE
-                && (nameChanged || brandChanged)) {
-            throw new DeviceConflictException(
-                    "Cannot change name or brand while device is IN_USE"
-            );
-        }
+    @Transactional
+    public DeviceResponse patchDevice(UUID id, PatchDeviceRequest request) {
+        Device device = findDevice(id);
 
-        device.setName(request.name());
-        device.setBrand(request.brand());
-        device.setState(request.state());
+        String name = request.getName() != null
+                ? request.getName()
+                : device.getName();
 
-        Device saved = repository.saveAndFlush(device);
-        return DeviceResponse.from(saved);
+        String brand = request.getBrand() != null
+                ? request.getBrand()
+                : device.getBrand();
+
+        DeviceState state = request.getState() != null
+                ? request.getState()
+                : device.getState();
+
+        return applyUpdate(device, name, brand, state);
     }
 
     @Transactional
     public void deleteDevice(UUID id) {
-        Device device = repository.findById(id)
-                .orElseThrow(() -> new DeviceNotFoundException(id));
+        Device device = findDevice(id);
 
         if (device.getState() == DeviceState.IN_USE) {
             throw new DeviceConflictException(
@@ -99,5 +102,45 @@ public class DeviceService {
         }
 
         repository.delete(device);
+    }
+
+    private Device findDevice(UUID id) {
+        return repository.findById(id)
+                .orElseThrow(() -> new DeviceNotFoundException(id));
+    }
+
+    private DeviceResponse applyUpdate(
+            Device device,
+            String name,
+            String brand,
+            DeviceState state) {
+
+        validateChanges(device, name, brand);
+
+        device.setName(name);
+        device.setBrand(brand);
+        device.setState(state);
+
+        return DeviceResponse.from(repository.saveAndFlush(device));
+    }
+
+    private void validateChanges(
+            Device device,
+            String name,
+            String brand) {
+
+        boolean nameChanged =
+                !Objects.equals(device.getName(), name);
+
+        boolean brandChanged =
+                !Objects.equals(device.getBrand(), brand);
+
+        if (device.getState() == DeviceState.IN_USE
+                && (nameChanged || brandChanged)) {
+
+            throw new DeviceConflictException(
+                    "Cannot change name or brand while device is IN_USE"
+            );
+        }
     }
 }
