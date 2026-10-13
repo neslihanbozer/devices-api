@@ -86,4 +86,18 @@ public class DeviceService {
         Device saved = repository.saveAndFlush(device);
         return DeviceResponse.from(saved);
     }
+
+    @Transactional
+    public void deleteDevice(UUID id) {
+        Device device = repository.findById(id)
+                .orElseThrow(() -> new DeviceNotFoundException(id));
+
+        if (device.getState() == DeviceState.IN_USE) {
+            throw new DeviceConflictException(
+                    "Cannot delete a device while it is IN_USE"
+            );
+        }
+
+        repository.delete(device);
+    }
 }

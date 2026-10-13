@@ -51,4 +51,10 @@ public class DeviceController {
             @Valid @RequestBody UpdateDeviceRequest request) {
         return ResponseEntity.ok(service.updateDevice(id, request));
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteDevice(@PathVariable UUID id) {
+        service.deleteDevice(id);
+        return ResponseEntity.noContent().build();
+    }
 }
