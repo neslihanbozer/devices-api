@@ -1,5 +1,6 @@
-package dev.devices.api.device.domain;
+package dev.devices.api.domain;
 
+import dev.devices.api.domain.DeviceState;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

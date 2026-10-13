@@ -1,5 +1,5 @@
 
-package dev.devices.api.device.domain;
+package dev.devices.api.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

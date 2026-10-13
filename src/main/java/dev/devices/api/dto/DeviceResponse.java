@@ -1,8 +1,8 @@
 
-package dev.devices.api.device.web.dto;
+package dev.devices.api.dto;
 
-import dev.devices.api.device.domain.Device;
-import dev.devices.api.device.domain.DeviceState;
+import dev.devices.api.domain.Device;
+import dev.devices.api.domain.DeviceState;
 
 import java.time.Instant;
 import java.util.UUID;
