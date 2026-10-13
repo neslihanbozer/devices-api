@@ -1,4 +1,3 @@
-
 package dev.devices.api.service;
 
 import dev.devices.api.common.exception.DeviceConflictException;
@@ -34,16 +33,12 @@ public class DeviceService {
         device.setBrand(request.brand());
         device.setState(request.state());
 
-        Device saved = repository.saveAndFlush(device);
-        return DeviceResponse.from(saved);
+        return DeviceResponse.from(repository.saveAndFlush(device));
     }
 
     @Transactional(readOnly = true)
     public DeviceResponse getDeviceById(UUID id) {
-        Device device = repository.findById(id)
-                .orElseThrow(() -> new DeviceNotFoundException(id));
-
-        return DeviceResponse.from(device);
+        return DeviceResponse.from(findDevice(id));
     }
 
     @Transactional(readOnly = true)
@@ -67,61 +62,72 @@ public class DeviceService {
 
     @Transactional
     public DeviceResponse updateDevice(UUID id, UpdateDeviceRequest request) {
-        Device device = repository.findById(id)
-                .orElseThrow(() -> new DeviceNotFoundException(id));
+        Device device = findDevice(id);
 
-        boolean nameChanged =
-                !Objects.equals(device.getName(), request.name());
-
-        boolean brandChanged =
-                !Objects.equals(device.getBrand(), request.brand());
-
-        if (device.getState() == DeviceState.IN_USE
-                && (nameChanged || brandChanged)) {
-            throw new DeviceConflictException(
-                    "Cannot change name or brand while device is IN_USE"
-            );
-        }
-
-        device.setName(request.name());
-        device.setBrand(request.brand());
-        device.setState(request.state());
-
-        Device saved = repository.saveAndFlush(device);
-        return DeviceResponse.from(saved);
+        return applyUpdate(
+                device,
+                request.name(),
+                request.brand(),
+                request.state()
+        );
     }
 
     @Transactional
     public DeviceResponse patchDevice(UUID id, PatchDeviceRequest request) {
-        Device device = repository.findById(id)
+        Device device = findDevice(id);
+
+        String name = request.getName() != null
+                ? request.getName()
+                : device.getName();
+
+        String brand = request.getBrand() != null
+                ? request.getBrand()
+                : device.getBrand();
+
+        DeviceState state = request.getState() != null
+                ? request.getState()
+                : device.getState();
+
+        return applyUpdate(device, name, brand, state);
+    }
+
+    private Device findDevice(UUID id) {
+        return repository.findById(id)
                 .orElseThrow(() -> new DeviceNotFoundException(id));
+    }
 
-        boolean nameChanged = request.name() != null
-                && !Objects.equals(device.getName(), request.name());
+    private DeviceResponse applyUpdate(
+            Device device,
+            String name,
+            String brand,
+            DeviceState state) {
 
-        boolean brandChanged = request.brand() != null
-                && !Objects.equals(device.getBrand(), request.brand());
+        validateChanges(device, name, brand);
+
+        device.setName(name);
+        device.setBrand(brand);
+        device.setState(state);
+
+        return DeviceResponse.from(repository.saveAndFlush(device));
+    }
+
+    private void validateChanges(
+            Device device,
+            String name,
+            String brand) {
+
+        boolean nameChanged =
+                !Objects.equals(device.getName(), name);
+
+        boolean brandChanged =
+                !Objects.equals(device.getBrand(), brand);
 
         if (device.getState() == DeviceState.IN_USE
                 && (nameChanged || brandChanged)) {
+
             throw new DeviceConflictException(
                     "Cannot change name or brand while device is IN_USE"
             );
         }
-
-        if (request.name() != null) {
-            device.setName(request.name());
-        }
-
-        if (request.brand() != null) {
-            device.setBrand(request.brand());
-        }
-
-        if (request.state() != null) {
-            device.setState(request.state());
-        }
-
-        Device saved = repository.saveAndFlush(device);
-        return DeviceResponse.from(saved);
     }
 }

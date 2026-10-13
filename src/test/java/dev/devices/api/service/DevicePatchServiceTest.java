@@ -8,6 +8,7 @@ import dev.devices.api.repository.DeviceRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -34,15 +35,18 @@ class DevicePatchServiceTest {
         Device device = device("iPhone", "Apple", DeviceState.AVAILABLE);
 
         when(repository.findById(id))
-                .thenReturn(java.util.Optional.of(device));
+                .thenReturn(Optional.of(device));
 
-        var request = new PatchDeviceRequest("iPhone 17", null, null);
+        var request = new PatchDeviceRequest();
+        request.setName("iPhone 17");
 
         var response = service.patchDevice(id, request);
 
         assertEquals("iPhone 17", response.name());
         assertEquals("Apple", response.brand());
         assertEquals(DeviceState.AVAILABLE, response.state());
+
+        verify(repository).saveAndFlush(device);
     }
 
     @Test
@@ -51,15 +55,18 @@ class DevicePatchServiceTest {
         Device device = device("iPhone", "Apple", DeviceState.AVAILABLE);
 
         when(repository.findById(id))
-                .thenReturn(java.util.Optional.of(device));
+                .thenReturn(Optional.of(device));
 
-        var request = new PatchDeviceRequest(null, null, DeviceState.INACTIVE);
+        var request = new PatchDeviceRequest();
+        request.setState(DeviceState.INACTIVE);
 
         var response = service.patchDevice(id, request);
 
         assertEquals("iPhone", response.name());
         assertEquals("Apple", response.brand());
         assertEquals(DeviceState.INACTIVE, response.state());
+
+        verify(repository).saveAndFlush(device);
     }
 
     @Test
@@ -68,9 +75,10 @@ class DevicePatchServiceTest {
         Device device = device("iPhone", "Apple", DeviceState.IN_USE);
 
         when(repository.findById(id))
-                .thenReturn(java.util.Optional.of(device));
+                .thenReturn(Optional.of(device));
 
-        var request = new PatchDeviceRequest("New Name", null, null);
+        var request = new PatchDeviceRequest();
+        request.setName("New Name");
 
         assertThrows(
                 IllegalStateException.class,
