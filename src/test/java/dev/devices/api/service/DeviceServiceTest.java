@@ -1,4 +1,3 @@
-
 package dev.devices.api.service;
 
 import dev.devices.api.common.exception.DeviceNotFoundException;
@@ -140,11 +139,20 @@ class DeviceServiceTest {
     }
 
     @Test
+    void shouldIgnoreBlankBrandFilter() {
+        when(repository.findAll()).thenReturn(List.of());
+
+        service.getDevices("   ", null);
+
+        verify(repository).findAll();
+        verify(repository, never()).findByBrand(any());
+    }
+
+    @Test
     void shouldFilterDevicesByState() {
         Device device = createDevice("Galaxy S25", "Samsung", DeviceState.IN_USE);
 
-        when(repository.findByState(DeviceState.IN_USE))
-                .thenReturn(List.of(device));
+        when(repository.findByState(DeviceState.IN_USE)).thenReturn(List.of(device));
 
         List<DeviceResponse> result = service.getDevices(null, DeviceState.IN_USE);
 
@@ -182,10 +190,6 @@ class DeviceServiceTest {
     }
 
     private Device createDevice(String name, String brand, DeviceState state) {
-        Device device = new Device();
-        device.setName(name);
-        device.setBrand(brand);
-        device.setState(state);
-        return device;
+        return new Device(name, brand, state);
     }
 }

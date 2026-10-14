@@ -41,30 +41,42 @@ This document records assumptions and design decisions made for the Devices API.
 
 ## 6. Concurrency
 
-- JPA optimistic locking using `@Version` is planned to detect conflicting concurrent database transactions.
-- Update and delete operations will use transactional boundaries.
-- Concurrency conflicts will be handled explicitly.
+- JPA optimistic locking (`@Version`) detects conflicting concurrent transactions.
+- Update and delete operations run inside transactional boundaries and flush before returning.
+- A concurrent modification is returned as `409 Conflict` ("Concurrent modification").
 - HTTP conditional requests using ETag or If-Match are outside the initial scope.
 
 ## 7. Security
 
-- HTTP Basic authentication will be used to protect the API.
-- Authentication credentials will be configurable through environment variables.
-- No credentials will be stored in source control.
-- HTTPS will be required for secure production deployment.
+- The API is protected with HTTP Basic authentication (stateless, no sessions or cookies).
+- Two roles are supported:
+  - `VIEWER`: read-only access (`GET` requests).
+  - `ADMIN`: full access (create, update, delete).
+- Unauthenticated requests return `401`; authenticated requests without the required role return `403`. Both use the Problem Details format.
+- Swagger UI, the OpenAPI document and the health endpoint are public; every other endpoint is denied.
+- Credentials are configured through environment variables (`API_ADMIN_*`, `API_VIEWER_*`). Passwords have no default, so the application fails to start without them.
+- Passwords are generated on first startup, stored in a local `.env` file, and never committed to source control. They are kept BCrypt-hashed in memory.
+- CSRF protection is disabled because the API is stateless and does not use cookies.
+- HTTPS is required for a production deployment, since Basic credentials are only Base64-encoded.
 
-## 8. Data Initialization
+## 8. Listing and Filtering
 
-- Production will start without predefined device records.
-- Development-only sample data may be provided for testing and demonstration.
-- Integration tests will manage their own isolated test data.
+- `GET /api/devices` returns all matching devices as a JSON array, as required by the assignment.
+- Brand filtering is an exact, case-sensitive match. A blank `brand` parameter is ignored.
 
-## 9. Future Improvements
+## 9. Data Initialization
+
+- Production starts without predefined device records.
+- Integration tests manage their own isolated test data.
+
+## 10. Future Improvements
 
 The following features are outside the initial scope but may be considered if requirements evolve:
 
-- Audit logging and device change history.
-- Soft deletion and retention policies.
-- Advanced authentication and role-based authorization.
-- HTTP conditional requests to prevent stale client updates.
-- Additional monitoring and operational improvements.
+- Pagination and sorting for `GET /api/devices`.
+- A dedicated identity provider instead of HTTP Basic (e.g. Keycloak, Auth0, Azure AD).
+- Finer-grained authorization and brute-force protection (rate limiting).
+- A professional metrics, tracing and error-monitoring tool (e.g. Prometheus + Grafana, OpenTelemetry, Sentry, Datadog).
+- Client-side optimistic concurrency control (ETag / If-Match).
+- Case-insensitive brand search.
+- State-transition rules, soft delete and change history.

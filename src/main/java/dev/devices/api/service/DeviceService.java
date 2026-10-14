@@ -1,7 +1,5 @@
-
 package dev.devices.api.service;
 
-import dev.devices.api.common.exception.DeviceConflictException;
 import dev.devices.api.common.exception.DeviceNotFoundException;
 import dev.devices.api.domain.Device;
 import dev.devices.api.domain.DeviceState;
@@ -10,15 +8,19 @@ import dev.devices.api.dto.DeviceResponse;
 import dev.devices.api.dto.PatchDeviceRequest;
 import dev.devices.api.dto.UpdateDeviceRequest;
 import dev.devices.api.repository.DeviceRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 
 @Service
 public class DeviceService {
+
+    private static final Logger log = LoggerFactory.getLogger(DeviceService.class);
 
     private final DeviceRepository repository;
 
@@ -28,12 +30,12 @@ public class DeviceService {
 
     @Transactional
     public DeviceResponse createDevice(CreateDeviceRequest request) {
-        Device device = new Device();
-        device.setName(request.name());
-        device.setBrand(request.brand());
-        device.setState(request.state());
+        Device device = new Device(request.name(), request.brand(), request.state());
 
-        return DeviceResponse.from(repository.saveAndFlush(device));
+        Device saved = repository.saveAndFlush(device);
+        log.info("Created device {}", saved.getId());
+
+        return DeviceResponse.from(saved);
     }
 
     @Transactional(readOnly = true)
@@ -42,12 +44,15 @@ public class DeviceService {
     }
 
     @Transactional(readOnly = true)
-    public List<DeviceResponse> getDevices(String brand, DeviceState state) {
-        List<Device> devices;
+    public List<DeviceResponse> getDevices(String rawBrand, DeviceState state) {
+        // Brands are stored trimmed; a blank brand (e.g. "?brand=") means "no brand filter".
+        String brand = Device.normalize(rawBrand);
+        boolean hasBrand = StringUtils.hasText(brand);
 
-        if (brand != null && state != null) {
+        List<Device> devices;
+        if (hasBrand && state != null) {
             devices = repository.findByBrandAndState(brand, state);
-        } else if (brand != null) {
+        } else if (hasBrand) {
             devices = repository.findByBrand(brand);
         } else if (state != null) {
             devices = repository.findByState(state);
@@ -64,44 +69,35 @@ public class DeviceService {
     public DeviceResponse updateDevice(UUID id, UpdateDeviceRequest request) {
         Device device = findDevice(id);
 
-        return applyUpdate(
-                device,
-                request.name(),
-                request.brand(),
-                request.state()
-        );
+        device.update(request.name(), request.brand(), request.state());
+
+        return save(device);
     }
 
     @Transactional
     public DeviceResponse patchDevice(UUID id, PatchDeviceRequest request) {
         Device device = findDevice(id);
 
-        String name = request.getName() != null
-                ? request.getName()
-                : device.getName();
+        device.update(
+                request.getName() != null ? request.getName() : device.getName(),
+                request.getBrand() != null ? request.getBrand() : device.getBrand(),
+                request.getState() != null ? request.getState() : device.getState()
+        );
 
-        String brand = request.getBrand() != null
-                ? request.getBrand()
-                : device.getBrand();
-
-        DeviceState state = request.getState() != null
-                ? request.getState()
-                : device.getState();
-
-        return applyUpdate(device, name, brand, state);
+        return save(device);
     }
 
     @Transactional
     public void deleteDevice(UUID id) {
         Device device = findDevice(id);
 
-        if (device.getState() == DeviceState.IN_USE) {
-            throw new DeviceConflictException(
-                    "Cannot delete a device while it is IN_USE"
-            );
-        }
+        device.ensureDeletable();
 
         repository.delete(device);
+        // Flush here so a concurrent modification surfaces inside this method
+        // as an OptimisticLockingFailureException (mapped to HTTP 409).
+        repository.flush();
+        log.info("Deleted device {}", id);
     }
 
     private Device findDevice(UUID id) {
@@ -109,38 +105,9 @@ public class DeviceService {
                 .orElseThrow(() -> new DeviceNotFoundException(id));
     }
 
-    private DeviceResponse applyUpdate(
-            Device device,
-            String name,
-            String brand,
-            DeviceState state) {
-
-        validateChanges(device, name, brand);
-
-        device.setName(name);
-        device.setBrand(brand);
-        device.setState(state);
-
-        return DeviceResponse.from(repository.saveAndFlush(device));
-    }
-
-    private void validateChanges(
-            Device device,
-            String name,
-            String brand) {
-
-        boolean nameChanged =
-                !Objects.equals(device.getName(), name);
-
-        boolean brandChanged =
-                !Objects.equals(device.getBrand(), brand);
-
-        if (device.getState() == DeviceState.IN_USE
-                && (nameChanged || brandChanged)) {
-
-            throw new DeviceConflictException(
-                    "Cannot change name or brand while device is IN_USE"
-            );
-        }
+    private DeviceResponse save(Device device) {
+        Device saved = repository.saveAndFlush(device);
+        log.info("Updated device {}", saved.getId());
+        return DeviceResponse.from(saved);
     }
 }

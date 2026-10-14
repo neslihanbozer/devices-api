@@ -1,7 +1,7 @@
-
 services:
   db:
     image: postgres:17
+    restart: unless-stopped
     environment:
       POSTGRES_DB: devices_db
       POSTGRES_USER: devices_user
@@ -16,15 +16,26 @@ services:
 
   api:
     build: .
+    restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
       DB_URL: jdbc:postgresql://db:5432/devices_db
       DB_USERNAME: devices_user
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD before starting Docker Compose}
+      API_ADMIN_USERNAME: ${API_ADMIN_USERNAME:-admin}
+      API_ADMIN_PASSWORD: ${API_ADMIN_PASSWORD:?Set API_ADMIN_PASSWORD before starting Docker Compose}
+      API_VIEWER_USERNAME: ${API_VIEWER_USERNAME:-viewer}
+      API_VIEWER_PASSWORD: ${API_VIEWER_PASSWORD:?Set API_VIEWER_PASSWORD before starting Docker Compose}
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
 volumes:
   postgres_data:

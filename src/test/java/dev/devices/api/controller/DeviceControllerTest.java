@@ -1,33 +1,23 @@
-
 package dev.devices.api.controller;
+
+import dev.devices.api.support.AbstractIntegrationTest;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@Testcontainers
-@SpringBootTest
-@AutoConfigureMockMvc
-class DeviceControllerTest {
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer postgres =
-            new PostgreSQLContainer("postgres:17");
+@WithMockUser(roles = "ADMIN")
+class DeviceControllerTest extends AbstractIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -287,7 +277,7 @@ class DeviceControllerTest {
         mockMvc.perform(get("/api/devices")
                         .param("state", "INACTIVE"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[?(@.state != 'INACTIVE')]").isEmpty())
                 .andExpect(jsonPath("$[?(@.brand == '" + brand + "')]").isNotEmpty());
     }
 
@@ -321,12 +311,130 @@ class DeviceControllerTest {
     void shouldReturn400ForInvalidStateFilter() throws Exception {
         mockMvc.perform(get("/api/devices")
                         .param("state", "BROKEN"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
+    // ========================================
+    // ERROR FORMAT (RFC 9457 Problem Details)
+    // ========================================
+
+    @Test
+    void shouldReturnFieldErrorsAsProblemDetail() throws Exception {
+        String request = """
+                {
+                    "name": "",
+                    "brand": "Apple",
+                    "state": "AVAILABLE"
+                }
+                """;
+
+        mockMvc.perform(post("/api/devices")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.title").value("Validation failed"))
+                .andExpect(jsonPath("$.errors.name").exists())
+                .andExpect(jsonPath("$.instance").value("/api/devices"));
+    }
+
+    @Test
+    void shouldReturnNotFoundAsProblemDetail() throws Exception {
+        UUID id = UUID.randomUUID();
+
+        mockMvc.perform(get("/api/devices/{id}", id))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.detail").value("Device not found with id: " + id));
+    }
+
+    @Test
+    void shouldNameFieldWhenPatchSendsExplicitNull() throws Exception {
+        String id = createDeviceAndGetId("NullPatchPhone", "Brand-" + UUID.randomUUID());
+
+        mockMvc.perform(patch("/api/devices/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\": null}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Validation failed"))
+                .andExpect(jsonPath("$.errors.name").value("must not be null"));
+    }
+
+    @Test
+    void shouldNameFieldWhenPatchSendsReadOnlyField() throws Exception {
+        String id = createDeviceAndGetId("ReadOnlyPatchPhone", "Brand-" + UUID.randomUUID());
+
+        mockMvc.perform(patch("/api/devices/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"createdAt\": \"2020-01-01T00:00:00Z\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.createdAt").value("unknown or read-only field"));
+    }
+
+    @Test
+    void shouldListAllowedValuesForInvalidState() throws Exception {
+        mockMvc.perform(post("/api/devices")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "iPhone", "brand": "Apple", "state": "BROKEN"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.state").value("must be one of [AVAILABLE, IN_USE, INACTIVE]"));
+    }
+
+    @Test
+    void shouldReportMalformedJson() throws Exception {
+        mockMvc.perform(post("/api/devices")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\": "))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Malformed request"));
+    }
+
+    // ========================================
+    // INPUT NORMALIZATION
+    // ========================================
+
+    @Test
+    void shouldTrimNameAndBrandAndMatchTrimmedBrandFilter() throws Exception {
+        String brand = "TrimBrand-" + UUID.randomUUID();
+
+        mockMvc.perform(post("/api/devices")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "  Spaced Phone  ", "brand": "  %s  ", "state": "AVAILABLE"}
+                                """.formatted(brand)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Spaced Phone"))
+                .andExpect(jsonPath("$.brand").value(brand));
+
+        mockMvc.perform(get("/api/devices")
+                        .param("brand", " " + brand + " "))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
     }
 
     // ========================================
     // TEST HELPER
     // ========================================
+
+    private String createDeviceAndGetId(String name, String brand) throws Exception {
+        String response = mockMvc.perform(post("/api/devices")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "%s", "brand": "%s", "state": "AVAILABLE"}
+                                """.formatted(name, brand)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        return objectMapper.readTree(response).get("id").asText();
+    }
 
     private void createDeviceThroughApi(
             String name, String brand, String state) throws Exception {

@@ -1,32 +1,21 @@
-
 package dev.devices.api.controller;
+
+import dev.devices.api.support.AbstractIntegrationTest;
 
 import dev.devices.api.domain.Device;
 import dev.devices.api.domain.DeviceState;
 import dev.devices.api.repository.DeviceRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
-@AutoConfigureMockMvc
-@Testcontainers
-class DeviceDeleteControllerTest {
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer postgres =
-            new PostgreSQLContainer("postgres:17");
+@WithMockUser(roles = "ADMIN")
+class DeviceDeleteControllerTest extends AbstractIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -78,10 +67,7 @@ class DeviceDeleteControllerTest {
     }
 
     private Device createDevice(DeviceState state) {
-        Device device = new Device();
-        device.setName("iPhone");
-        device.setBrand("Apple");
-        device.setState(state);
+        Device device = new Device("iPhone", "Apple", state);
         return repository.saveAndFlush(device);
     }
 }
