@@ -27,9 +27,14 @@ This document records assumptions and design decisions made for the Devices API.
 
 ## 4. Device Deletion
 
-- Hard deletion is selected because audit history, recovery, and data retention are not required by the assignment.
-- Devices in the `IN_USE` state cannot be deleted.
-- Deleting a device permanently removes its database record.
+Hard delete was chosen deliberately:
+
+- **Semantics:** the assignment defines the operation as "delete a single device". There is no requirement to list, restore or audit deleted devices.
+- **The risky cases are already guarded:** a device that is `IN_USE` cannot be deleted (`409`), and optimistic locking rejects a delete that races with a concurrent change (`409`).
+- **Soft delete has a real cost without a requirement behind it:** every query (fetch all, filter by brand/state, fetch by id) would have to exclude deleted rows, indexes would have to account for them, and retention and restore rules would have to be defined.
+- **Data stays small and consistent:** deleted devices do not accumulate in the table or in query results.
+
+If audit or recovery becomes a requirement, the next step would be soft delete (a `deleted_at` column filtered globally, e.g. with Hibernate `@SQLRestriction`) or an append-only audit table that records deletions.
 
 ## 5. Data Validation
 
@@ -41,10 +46,18 @@ This document records assumptions and design decisions made for the Devices API.
 
 ## 6. Concurrency
 
-- JPA optimistic locking (`@Version`) detects conflicting concurrent transactions.
-- Update and delete operations run inside transactional boundaries and flush before returning.
-- A concurrent modification is returned as `409 Conflict` ("Concurrent modification").
-- HTTP conditional requests using ETag or If-Match are outside the initial scope.
+Concurrency is handled with **optimistic** locking.
+
+- Every device has a `@Version` column. Updates and deletes include the version in the `WHERE` clause, so a write based on outdated data affects no rows.
+- Update and delete operations run in a transaction and flush before returning, so a conflict surfaces inside the request.
+- A conflicting write returns `409 Conflict` ("Concurrent modification").
+- Example: a delete reads an `AVAILABLE` device while another request sets it to `IN_USE`. The delete fails instead of removing a device that is now in use.
+
+**Why optimistic and not pessimistic locking**
+
+- Pessimistic locking (`SELECT ... FOR UPDATE`) makes concurrent requests wait for a database lock. It suits data that is updated very frequently and where retries are expensive (e.g. stock counters).
+- Device records are rarely written concurrently and transactions are short, so conflicts are rare. Optimistic locking costs nothing when there is no conflict, never blocks, and has no deadlock risk.
+- A database lock cannot span two HTTP requests, so it could not prevent lost updates between a client's read and its later write anyway. That case is better solved at the HTTP level (see Future Improvements).
 
 ## 7. Security
 
@@ -74,9 +87,9 @@ This document records assumptions and design decisions made for the Devices API.
 The following features are outside the initial scope but may be considered if requirements evolve:
 
 - Pagination and sorting for `GET /api/devices`.
+- `ETag` / `If-Match` headers to prevent lost updates between a client's read and its later write (`412 Precondition Failed`).
 - A dedicated identity provider instead of HTTP Basic (e.g. Keycloak, Auth0, Azure AD).
 - Finer-grained authorization and brute-force protection (rate limiting).
 - A professional metrics, tracing and error-monitoring tool (e.g. Prometheus + Grafana, OpenTelemetry, Sentry, Datadog).
-- Client-side optimistic concurrency control (ETag / If-Match).
 - Case-insensitive brand search.
 - State-transition rules, soft delete and change history.
