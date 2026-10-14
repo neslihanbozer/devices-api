@@ -1,5 +1,6 @@
-
 package dev.devices.api.controller;
+
+import dev.devices.api.support.AbstractIntegrationTest;
 
 import dev.devices.api.domain.DeviceState;
 import dev.devices.api.dto.CreateDeviceRequest;
@@ -8,14 +9,9 @@ import dev.devices.api.dto.UpdateDeviceRequest;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -25,15 +21,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@Testcontainers
-@SpringBootTest
-@AutoConfigureMockMvc
-class DeviceUpdateControllerTest {
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> postgres =
-            new PostgreSQLContainer<>("postgres:17");
+@WithMockUser(roles = "ADMIN")
+class DeviceUpdateControllerTest extends AbstractIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;

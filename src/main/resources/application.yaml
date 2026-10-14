@@ -15,3 +15,14 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+
+# HTTP Basic users. Passwords have no default: the application refuses to
+# start without them. start.ps1 / start.sh generate them into .env.
+devices:
+  security:
+    admin:
+      username: ${API_ADMIN_USERNAME:admin}
+      password: ${API_ADMIN_PASSWORD}
+    viewer:
+      username: ${API_VIEWER_USERNAME:viewer}
+      password: ${API_VIEWER_PASSWORD}

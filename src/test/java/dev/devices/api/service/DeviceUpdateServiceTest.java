@@ -1,6 +1,6 @@
-
 package dev.devices.api.service;
 
+import dev.devices.api.common.exception.DeviceConflictException;
 import dev.devices.api.common.exception.DeviceNotFoundException;
 import dev.devices.api.domain.Device;
 import dev.devices.api.domain.DeviceState;
@@ -79,7 +79,7 @@ class DeviceUpdateServiceTest {
         );
 
         assertThrows(
-                IllegalStateException.class,
+                DeviceConflictException.class,
                 () -> service.updateDevice(id, request)
         );
 
@@ -98,7 +98,7 @@ class DeviceUpdateServiceTest {
         );
 
         assertThrows(
-                IllegalStateException.class,
+                DeviceConflictException.class,
                 () -> service.updateDevice(id, request)
         );
 
@@ -141,10 +141,7 @@ class DeviceUpdateServiceTest {
     }
 
     private Device device(String name, String brand, DeviceState state) {
-        Device device = new Device();
-        device.setName(name);
-        device.setBrand(brand);
-        device.setState(state);
+        Device device = new Device(name, brand, state);
         return device;
     }
 }

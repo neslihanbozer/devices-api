@@ -1,4 +1,3 @@
-
 package dev.devices.api.service;
 
 import dev.devices.api.common.exception.DeviceConflictException;
@@ -80,10 +79,7 @@ class DeviceDeleteServiceTest {
     }
 
     private Device device(DeviceState state) {
-        Device device = new Device();
-        device.setName("iPhone");
-        device.setBrand("Apple");
-        device.setState(state);
+        Device device = new Device("iPhone", "Apple", state);
         return device;
     }
 }

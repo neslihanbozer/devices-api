@@ -1,0 +1,458 @@
+{
+  "info": {
+    "name": "Devices API",
+    "description": "End-to-end requests for the Devices API with automated checks.\n\nAuthentication: HTTP Basic. Set the collection variables `adminPassword` and `viewerPassword` to the values printed by start.ps1 / start.sh (also stored in `.env`).\n\nRun the whole collection in order (Collection Runner or `newman run`): requests share the `deviceId` and `brand` variables that are set automatically by the first requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "basic",
+    "basic": [
+      { "key": "username", "value": "{{adminUsername}}", "type": "string" },
+      { "key": "password", "value": "{{adminPassword}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "adminUsername", "value": "admin" },
+    { "key": "adminPassword", "value": "" },
+    { "key": "viewerUsername", "value": "viewer" },
+    { "key": "viewerPassword", "value": "" },
+    { "key": "deviceId", "value": "" },
+    { "key": "brand", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0. Health",
+      "item": [
+        {
+          "name": "Health check (public)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Application is UP', () => pm.expect(pm.response.json().status).to.eql('UP'));"
+          ]}}],
+          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{baseUrl}}/actuator/health" }
+        }
+      ]
+    },
+    {
+      "name": "1. Create",
+      "item": [
+        {
+          "name": "Create device",
+          "event": [
+            { "listen": "prerequest", "script": { "exec": [
+              "// Unique brand per run so filter checks are not affected by older data.",
+              "pm.collectionVariables.set('brand', 'PostmanBrand-' + Date.now());"
+            ]}},
+            { "listen": "test", "script": { "exec": [
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "const body = pm.response.json();",
+              "pm.test('Returns created device', () => {",
+              "  pm.expect(body.id).to.be.a('string');",
+              "  pm.expect(body.name).to.eql('iPhone 16');",
+              "  pm.expect(body.brand).to.eql(pm.collectionVariables.get('brand'));",
+              "  pm.expect(body.state).to.eql('AVAILABLE');",
+              "  pm.expect(body.createdAt).to.be.a('string');",
+              "});",
+              "pm.collectionVariables.set('deviceId', body.id);"
+            ]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/devices",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"iPhone 16\",\n  \"brand\": \"{{brand}}\",\n  \"state\": \"AVAILABLE\"\n}" }
+          }
+        },
+        {
+          "name": "Create second device (INACTIVE, same brand)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 201', () => pm.response.to.have.status(201));",
+            "pm.test('State is INACTIVE', () => pm.expect(pm.response.json().state).to.eql('INACTIVE'));"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/devices",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"iPad\",\n  \"brand\": \"{{brand}}\",\n  \"state\": \"INACTIVE\"\n}" }
+          }
+        },
+        {
+          "name": "Create - validation error (400)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));",
+            "pm.test('Problem Details content type', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'));",
+            "const body = pm.response.json();",
+            "pm.test('Lists invalid fields', () => {",
+            "  pm.expect(body.title).to.eql('Validation failed');",
+            "  pm.expect(body.errors).to.have.property('name');",
+            "  pm.expect(body.errors).to.have.property('state');",
+            "});"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/devices",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"\",\n  \"brand\": \"Apple\"\n}" }
+          }
+        },
+        {
+          "name": "Create - invalid state value (400)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/devices",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"iPhone\",\n  \"brand\": \"Apple\",\n  \"state\": \"BROKEN\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Fetch",
+      "item": [
+        {
+          "name": "Get device by id",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Returns the same device', () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('deviceId')));"
+          ]}}],
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/devices/{{deviceId}}" }
+        },
+        {
+          "name": "Get device - unknown id (404)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 404', () => pm.response.to.have.status(404));",
+            "pm.test('Problem Details body', () => pm.expect(pm.response.json().title).to.eql('Device not found'));"
+          ]}}],
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/devices/00000000-0000-0000-0000-000000000000" }
+        },
+        {
+          "name": "Get device - invalid UUID (400)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));"
+          ]}}],
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/devices/not-a-uuid" }
+        }
+      ]
+    },
+    {
+      "name": "3. List & filter",
+      "item": [
+        {
+          "name": "List all devices",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const body = pm.response.json();",
+            "pm.test('Returns an array containing the created device', () => {",
+            "  pm.expect(body).to.be.an('array');",
+            "  pm.expect(body.map(d => d.id)).to.include(pm.collectionVariables.get('deviceId'));",
+            "});"
+          ]}}],
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/devices" }
+        },
+        {
+          "name": "Filter by brand",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const body = pm.response.json();",
+            "pm.test('Both devices of the brand', () => {",
+            "  pm.expect(body).to.have.lengthOf(2);",
+            "  pm.expect(body.map(d => d.name)).to.have.members(['iPhone 16', 'iPad']);",
+            "});"
+          ]}}],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/devices?brand={{brand}}", "host": ["{{baseUrl}}"], "path": ["api", "devices"],
+              "query": [{ "key": "brand", "value": "{{brand}}" }] }
+          }
+        },
+        {
+          "name": "Filter by state",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('Only INACTIVE devices', () => pm.response.json().forEach(d => pm.expect(d.state).to.eql('INACTIVE')));"
+          ]}}],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/devices?state=INACTIVE", "host": ["{{baseUrl}}"], "path": ["api", "devices"],
+              "query": [{ "key": "state", "value": "INACTIVE" }] }
+          }
+        },
+        {
+          "name": "Filter by brand and state",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const body = pm.response.json();",
+            "pm.test('Exactly one AVAILABLE device of the brand', () => {",
+            "  pm.expect(body).to.have.lengthOf(1);",
+            "  pm.expect(body[0].id).to.eql(pm.collectionVariables.get('deviceId'));",
+            "});"
+          ]}}],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/devices?brand={{brand}}&state=AVAILABLE", "host": ["{{baseUrl}}"], "path": ["api", "devices"],
+              "query": [{ "key": "brand", "value": "{{brand}}" }, { "key": "state", "value": "AVAILABLE" }] }
+          }
+        },
+        {
+          "name": "Invalid state filter (400)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));"
+          ]}}],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/devices?state=BROKEN", "host": ["{{baseUrl}}"], "path": ["api", "devices"],
+              "query": [{ "key": "state", "value": "BROKEN" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Update",
+      "item": [
+        {
+          "name": "PUT - full update",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const body = pm.response.json();",
+            "pm.test('All fields replaced', () => {",
+            "  pm.expect(body.name).to.eql('iPhone 16 Pro');",
+            "  pm.expect(body.state).to.eql('AVAILABLE');",
+            "});"
+          ]}}],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/devices/{{deviceId}}",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"iPhone 16 Pro\",\n  \"brand\": \"{{brand}}\",\n  \"state\": \"AVAILABLE\"\n}" }
+          }
+        },
+        {
+          "name": "PUT - missing field (400)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));",
+            "pm.test('Brand reported', () => pm.expect(pm.response.json().errors).to.have.property('brand'));"
+          ]}}],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/devices/{{deviceId}}",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"iPhone 16 Pro\",\n  \"state\": \"AVAILABLE\"\n}" }
+          }
+        },
+        {
+          "name": "PATCH - set state IN_USE",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const body = pm.response.json();",
+            "pm.test('Only state changed', () => {",
+            "  pm.expect(body.state).to.eql('IN_USE');",
+            "  pm.expect(body.name).to.eql('iPhone 16 Pro');",
+            "});"
+          ]}}],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/devices/{{deviceId}}",
+            "body": { "mode": "raw", "raw": "{\n  \"state\": \"IN_USE\"\n}" }
+          }
+        },
+        {
+          "name": "PATCH - rename while IN_USE (409)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 409', () => pm.response.to.have.status(409));",
+            "pm.test('Business rule message', () => pm.expect(pm.response.json().detail).to.eql('Cannot change name or brand while device is IN_USE'));"
+          ]}}],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/devices/{{deviceId}}",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Renamed\"\n}" }
+          }
+        },
+        {
+          "name": "PUT - change brand while IN_USE (409)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 409', () => pm.response.to.have.status(409));"
+          ]}}],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/devices/{{deviceId}}",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"iPhone 16 Pro\",\n  \"brand\": \"OtherBrand\",\n  \"state\": \"IN_USE\"\n}" }
+          }
+        },
+        {
+          "name": "PATCH - explicit null (400)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));"
+          ]}}],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/devices/{{deviceId}}",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": null\n}" }
+          }
+        },
+        {
+          "name": "PATCH - unknown field such as createdAt (400)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 400', () => pm.response.to.have.status(400));"
+          ]}}],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/devices/{{deviceId}}",
+            "body": { "mode": "raw", "raw": "{\n  \"createdAt\": \"2020-01-01T00:00:00Z\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Security",
+      "item": [
+        {
+          "name": "No credentials (401)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 401', () => pm.response.to.have.status(401));",
+            "pm.test('Basic challenge header', () => pm.expect(pm.response.headers.get('WWW-Authenticate')).to.include('Basic'));",
+            "pm.test('Problem Details body', () => pm.expect(pm.response.json().title).to.eql('Unauthorized'));"
+          ]}}],
+          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{baseUrl}}/api/devices" }
+        },
+        {
+          "name": "Wrong password (401)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 401', () => pm.response.to.have.status(401));"
+          ]}}],
+          "request": {
+            "auth": { "type": "basic", "basic": [
+              { "key": "username", "value": "{{adminUsername}}", "type": "string" },
+              { "key": "password", "value": "wrong-password", "type": "string" }
+            ]},
+            "method": "GET", "url": "{{baseUrl}}/api/devices"
+          }
+        },
+        {
+          "name": "VIEWER can read (200)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));"
+          ]}}],
+          "request": {
+            "auth": { "type": "basic", "basic": [
+              { "key": "username", "value": "{{viewerUsername}}", "type": "string" },
+              { "key": "password", "value": "{{viewerPassword}}", "type": "string" }
+            ]},
+            "method": "GET", "url": "{{baseUrl}}/api/devices/{{deviceId}}"
+          }
+        },
+        {
+          "name": "VIEWER cannot create (403)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 403', () => pm.response.to.have.status(403));",
+            "pm.test('Problem Details body', () => pm.expect(pm.response.json().title).to.eql('Forbidden'));"
+          ]}}],
+          "request": {
+            "auth": { "type": "basic", "basic": [
+              { "key": "username", "value": "{{viewerUsername}}", "type": "string" },
+              { "key": "password", "value": "{{viewerPassword}}", "type": "string" }
+            ]},
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/devices",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Forbidden\",\n  \"brand\": \"Apple\",\n  \"state\": \"AVAILABLE\"\n}" }
+          }
+        },
+        {
+          "name": "VIEWER cannot delete (403)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 403', () => pm.response.to.have.status(403));"
+          ]}}],
+          "request": {
+            "auth": { "type": "basic", "basic": [
+              { "key": "username", "value": "{{viewerUsername}}", "type": "string" },
+              { "key": "password", "value": "{{viewerPassword}}", "type": "string" }
+            ]},
+            "method": "DELETE", "url": "{{baseUrl}}/api/devices/{{deviceId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Delete",
+      "item": [
+        {
+          "name": "DELETE while IN_USE (409)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 409', () => pm.response.to.have.status(409));",
+            "pm.test('Business rule message', () => pm.expect(pm.response.json().detail).to.eql('Cannot delete a device while it is IN_USE'));"
+          ]}}],
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/api/devices/{{deviceId}}" }
+        },
+        {
+          "name": "PATCH - release device (AVAILABLE)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "pm.test('State is AVAILABLE', () => pm.expect(pm.response.json().state).to.eql('AVAILABLE'));"
+          ]}}],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/devices/{{deviceId}}",
+            "body": { "mode": "raw", "raw": "{\n  \"state\": \"AVAILABLE\"\n}" }
+          }
+        },
+        {
+          "name": "DELETE device (204)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 204', () => pm.response.to.have.status(204));"
+          ]}}],
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/api/devices/{{deviceId}}" }
+        },
+        {
+          "name": "GET deleted device (404)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 404', () => pm.response.to.have.status(404));"
+          ]}}],
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/devices/{{deviceId}}" }
+        },
+        {
+          "name": "DELETE unknown device (404)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 404', () => pm.response.to.have.status(404));"
+          ]}}],
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/api/devices/00000000-0000-0000-0000-000000000000" }
+        }
+      ]
+    },
+    {
+      "name": "7. Documentation",
+      "item": [
+        {
+          "name": "OpenAPI spec (public)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));",
+            "const spec = pm.response.json();",
+            "pm.test('Documents device endpoints', () => {",
+            "  pm.expect(spec.info.title).to.eql('Devices API');",
+            "  pm.expect(spec.paths).to.have.property('/api/devices');",
+            "  pm.expect(spec.paths).to.have.property('/api/devices/{id}');",
+            "});",
+            "pm.test('Declares HTTP Basic security', () => pm.expect(spec.components.securitySchemes.basicAuth.scheme).to.eql('basic'));"
+          ]}}],
+          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{baseUrl}}/v3/api-docs" }
+        },
+        {
+          "name": "Swagger UI (public)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Status 200', () => pm.response.to.have.status(200));"
+          ]}}],
+          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{baseUrl}}/swagger-ui/index.html" }
+        }
+      ]
+    }
+  ]
+}

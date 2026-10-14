@@ -1,18 +1,14 @@
-
 package dev.devices.api.controller;
+
+import dev.devices.api.support.AbstractIntegrationTest;
 
 import dev.devices.api.domain.DeviceState;
 import dev.devices.api.dto.DeviceResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.testcontainers.postgresql.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.UUID;
@@ -20,15 +16,8 @@ import java.util.UUID;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@Testcontainers
-@SpringBootTest
-@AutoConfigureMockMvc
-class DevicePatchControllerTest {
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer postgres =
-            new PostgreSQLContainer("postgres:17");
+@WithMockUser(roles = "ADMIN")
+class DevicePatchControllerTest extends AbstractIntegrationTest {
 
     @Autowired
     MockMvc mockMvc;

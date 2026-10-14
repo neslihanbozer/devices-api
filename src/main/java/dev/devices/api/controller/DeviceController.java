@@ -9,6 +9,7 @@ import dev.devices.api.dto.UpdateDeviceRequest;
 import dev.devices.api.service.DeviceService;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -67,7 +68,8 @@ public class DeviceController {
 
     @Operation(
             summary = "List and filter devices",
-            description = "Retrieves all devices, optionally filtered by brand, state, or both."
+            description = "Retrieves all devices, optionally filtered by brand, state, or both. "
+                    + "Brand matching is exact and case-sensitive."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Devices retrieved successfully"),
@@ -75,7 +77,9 @@ public class DeviceController {
     })
     @GetMapping
     public ResponseEntity<List<DeviceResponse>> getDevices(
+            @Parameter(description = "Exact brand name", example = "Apple")
             @RequestParam(required = false) String brand,
+            @Parameter(description = "Device state")
             @RequestParam(required = false) DeviceState state) {
 
         return ResponseEntity.ok(service.getDevices(brand, state));
